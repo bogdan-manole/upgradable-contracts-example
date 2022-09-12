@@ -1,0 +1,43 @@
+@compiler >= 6
+
+include "./IUpgradableContract.aes"
+
+payable contract UpgradableContractV1 =
+  record state = { counter: int, replaced: bool}
+
+
+  //------------------------------------------------------------------------------
+  // IUpgradableContractV1
+  //------------------------------------------------------------------------------
+
+  entrypoint init(init_state: IUpgradableContract.init_state) =
+    { counter = init_state.counter, replaced = false}
+
+  entrypoint get_version() = "v1"
+
+  stateful entrypoint replace_contract(): IUpgradableContract.init_state =
+    require_not_replaced()
+    require_factory()
+
+    // send all the AE to the factory
+    Chain.spend(Contract.creator, Chain.balance(Contract.address))
+    put( state{ replaced = true })
+    {counter = state.counter}
+
+  //------------------------------------------------------------------------------
+  // CONSTRAINTS
+  //------------------------------------------------------------------------------
+  function require_not_replaced() =
+    require(!state.replaced,"already replaced")
+
+  function require_factory() =
+    require(Call.caller == Contract.creator,"not the factory")
+
+  //------------------------------------------------------------------------------
+  // V1 FUNCTIONS
+  //------------------------------------------------------------------------------
+  stateful entrypoint increase_counter() =
+    require_not_replaced()
+    put(state { counter @ c = c + 1 })
+
+  stateful entrypoint get_state() = state

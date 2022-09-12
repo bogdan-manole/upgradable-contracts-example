@@ -1,0 +1,6 @@
+contract interface IUpgradableContract =
+  record init_state = { counter: int }
+
+  entrypoint init : (init_state) => void
+
+  entrypoint replace_contract: () => init_state

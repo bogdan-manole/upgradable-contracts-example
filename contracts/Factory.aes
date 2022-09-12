@@ -1,0 +1,41 @@
+@compiler >= 6
+
+include "./IUpgradableContract.aes"
+include "./UpgradableContractV1.aes"
+
+payable main contract Factory =
+  record state = { the_contract: IUpgradableContract }
+
+  stateful entrypoint init() =
+    // we deploy the first version of the contract
+    //NOTE: we can pas the initial state of the contract to Factory's init if we want
+    //but for simplicity we are going to hardcode it here
+    let ct: UpgradableContractV1 = Chain.create({counter = 0})
+    // and return the first state fo the factory contract
+    { the_contract = Address.to_contract(ct.address) }
+
+  entrypoint get_contract() = state.the_contract
+
+  stateful entrypoint change_contract(contract_model: IUpgradableContract): IUpgradableContract =
+    //ensure the Caller is the owner
+    require(Call.caller == Contract.creator,"not the owner")
+
+    //snapshot the current balance of the contract
+    let original_balance = Chain.balance(state.the_contract.address)
+    //inform the contract it will be replaced
+    //we await for contract to transfer all it's funds 
+    //to the factory
+    let last_state = state.the_contract.replace_contract()
+
+    //clone the contract based on the model provided
+    //NOTE: we are going to pas the the state of the previous contract
+    let new_contract = Chain.clone( ref=contract_model, last_state )
+    //sent all funds owned by the factory to the new contract
+    Chain.spend(new_contract.address, Chain.balance(Contract.address))
+
+    //ensure the new contract received at least the original_balance of the 
+    //the previous contrract
+    require(Chain.balance(new_contract.address) >= original_balance,"funds were not tranfered")
+
+    put( state {the_contract = new_contract})
+    new_contract
